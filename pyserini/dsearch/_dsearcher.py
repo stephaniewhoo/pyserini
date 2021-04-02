@@ -21,17 +21,20 @@ import os
 from dataclasses import dataclass
 from typing import Dict, List
 
-import faiss
 import numpy as np
 import pandas as pd
 from transformers import (AutoModel, AutoTokenizer, BertModel, BertTokenizer, DPRQuestionEncoder,
                           DPRQuestionEncoderTokenizer, RobertaTokenizer)
+from transformers.file_utils import is_faiss_available, requires_faiss
 
 from pyserini.util import (download_encoded_queries, download_prebuilt_index,
                            get_dense_indexes_info)
 
 from ._model import AnceEncoder
 import torch
+
+if is_faiss_available():
+    import faiss
 
 
 class QueryEncoder:
@@ -159,9 +162,10 @@ class AnceQueryEncoder(QueryEncoder):
             return super().encode(query)
 
 
-class SBERTQueryEncoder(QueryEncoder):
+class AutoQueryEncoder(QueryEncoder):
 
-    def __init__(self, encoder_dir: str = None, encoded_query_dir: str = None, device: str = 'cpu'):
+    def __init__(self, encoder_dir: str = None, encoded_query_dir: str = None, device: str = 'cpu',
+                 pooling: str = 'cls', l2_norm: bool = False):
         super().__init__(encoded_query_dir)
         if encoder_dir:
             self.device = device
@@ -169,6 +173,8 @@ class SBERTQueryEncoder(QueryEncoder):
             self.model.to(self.device)
             self.tokenizer = AutoTokenizer.from_pretrained(encoder_dir)
             self.has_model = True
+            self.pooling = pooling
+            self.l2_norm = l2_norm
         if (not self.has_model) and (not self.has_encoded_query):
             raise Exception('Neither query encoder model nor encoded queries provided. Please provide at least one')
 
@@ -182,31 +188,6 @@ class SBERTQueryEncoder(QueryEncoder):
 
     def encode(self, query: str):
         if self.has_model:
-            inputs = self.tokenizer(query, padding=True, truncation=True, return_tensors='pt')
-            inputs.to(self.device)
-            outputs = self.model(**inputs)
-            embeddings = self._mean_pooling(outputs, inputs['attention_mask']).detach().cpu().numpy()
-            faiss.normalize_L2(embeddings)
-            return embeddings.flatten()
-        else:
-            return super().encode(query)
-
-
-class AutoQueryEncoder(QueryEncoder):
-
-    def __init__(self, encoder_dir: str = None, encoded_query_dir: str = None, device: str = 'cpu'):
-        super().__init__(encoded_query_dir)
-        if encoder_dir:
-            self.device = device
-            self.model = AutoModel.from_pretrained(encoder_dir)
-            self.model.to(self.device)
-            self.tokenizer = AutoTokenizer.from_pretrained(encoder_dir)
-            self.has_model = True
-        if (not self.has_model) and (not self.has_encoded_query):
-            raise Exception('Neither query encoder model nor encoded queries provided. Please provide at least one')
-
-    def encode(self, query: str):
-        if self.has_model:
             inputs = self.tokenizer(
                 query,
                 padding='longest',
@@ -216,7 +197,12 @@ class AutoQueryEncoder(QueryEncoder):
             )
             inputs.to(self.device)
             outputs = self.model(**inputs)
-            embeddings = outputs[0][:, 0, :].detach().cpu().numpy()
+            if self.pooling == "mean":
+                embeddings = self._mean_pooling(outputs, inputs['attention_mask']).detach().cpu().numpy()
+            else:
+                embeddings = outputs[0][:, 0, :].detach().cpu().numpy()
+            if self.l2_norm:
+                faiss.normalize_L2(embeddings)
             return embeddings.flatten()
         else:
             return super().encode(query)
@@ -238,6 +224,7 @@ class SimpleDenseSearcher:
     """
 
     def __init__(self, index_dir: str, query_encoder: QueryEncoder):
+        requires_faiss(self)
         self.query_encoder = query_encoder
         self.index, self.docids = self.load_index(index_dir)
         self.dimension = self.index.d
