@@ -19,7 +19,7 @@ import os
 from typing import Tuple, List, TextIO
 
 from pyserini.pyclass import autoclass
-from pyserini.analysis import JDefaultEnglishAnalyzer
+from pyserini.analysis import JDefaultEnglishAnalyzer, JWhiteSpaceAnalyzer
 from pyserini.search import get_topics, SimpleSearcher, JSimpleSearcherResult, JDisjunctionMaxQueryGenerator
 from pyserini.search.reranker import ClassifierType, PseudoRelevanceClassifierReranker
 from pyserini.query_iterator import QUERY_IDS, query_iterator
@@ -149,6 +149,7 @@ if __name__ == "__main__":
                         default=1, help="Specify batch size to search the collection concurrently.")
     parser.add_argument('--threads', type=int, metavar='num', required=False,
                         default=1, help="Maximum number of threads to use.")
+    parser.add_argument('--pretokenized', help='Boolean switch to accept pretokenized query', default=False, action='store_true')
     args = parser.parse_args()
 
     topics = get_topics(args.topics)
@@ -185,6 +186,11 @@ if __name__ == "__main__":
     if args.dismax:
         query_generator = JDisjunctionMaxQueryGenerator(args.tiebreaker)
         print(f'Using dismax query generator with tiebreaker={args.tiebreaker}')
+
+    if args.pretokenized:
+        analyzer = JWhiteSpaceAnalyzer()
+        searcher.set_analyzer(analyzer)
+        print(f'Using whitespace analyzer because of pretokenized option')
 
     if args.stopwords:
         analyzer = JDefaultEnglishAnalyzer.fromArguments('porter', False, args.stopwords)
