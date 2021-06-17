@@ -220,7 +220,7 @@ if __name__ == "__main__":
     parser.add_argument('--index', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--ibm-model',default='./collections/msmarco-ltr-passage/ibm_model/')
-    parser.add_argument('--queries',default='./collections/msmarco-ltr-passage/')
+    parser.add_argument('--queries',default='./collections/msmarco-ltr-document/')
     parser.add_argument('--output-format',default='tsv')
 
     args = parser.parse_args()
