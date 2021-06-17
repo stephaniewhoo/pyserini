@@ -34,6 +34,8 @@ sys.path.append('.')
 parser = argparse.ArgumentParser(description='Convert MSMARCO-adhoc documents.')
 parser.add_argument('--input', metavar='input file', help='input file',
                     type=str, required=True)
+parser.add_argument('--input-format', metavar='input format', help='input format',
+                    type=str, default='passage')
 parser.add_argument('--output', metavar='output file', help='output file',
                     type=str, required=True)
 parser.add_argument('--max_doc_size', metavar='max doc size bytes',
@@ -76,16 +78,25 @@ def batch_process(batch):
     def process(line):
         if not line:
             return None
-
-        line = line[:maxDocSize]  # cut documents that are too long!
-        fields = line.split('\t')
-        if len(fields) != 2:
-            return None
-
-        pid, body = fields
+        if (args.input_format=='passage'):
+            line = line[:maxDocSize]  # cut documents that are too long!
+            fields = line.split('\t')
+            if len(fields) != 2:
+                return None
+            pid, body = fields
+        else:
+            #line = line.strip()[:maxDocSize]
+            #if (not line.endswith('"}')):
+                #line = line + '"}'
+            #elif (not line.endswith('}')):
+                #line = line + '}'
+            json_line = json.loads(line)
+            pid = json_line['id']
+            body = json_line['contents']
+            url = json_line['url']
+            title = json_line['title']
 
         text, text_unlemm = nlp.proc_text(body)
-
 
         #doc = nlp_ent(body)
         #entity = {}
@@ -103,8 +114,15 @@ def batch_process(batch):
                "text_unlemm": text_unlemm,
                'contents': contents,
                "raw": body}
-        doc["text_bert_tok"] = get_retokenized(bert_tokenizer, body.lower())
+        if (len(body)>512):
+            doc["text_bert_tok"] = get_retokenized(bert_tokenizer, body.lower()[:512])
+        else:
+            doc["text_bert_tok"] = get_retokenized(bert_tokenizer, body.lower())
+        if (args.input_format == 'doc'):
+            doc["url"] = url
+            doc["title"] = title
         return doc
+    
     res = []
     start = time.time()
     for line in batch:
