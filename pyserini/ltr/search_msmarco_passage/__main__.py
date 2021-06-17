@@ -36,7 +36,7 @@ from pyserini.ltr import *
 """
 Running prediction on candidates
 """
-def dev_data_loader(file, format, top=100):
+def dev_data_loader(file, format):
     if format == 'tsv':
         dev = pd.read_csv(file, sep="\t",
                           names=['qid', 'pid', 'rank'],
@@ -184,7 +184,7 @@ def eval_recall(dev_qrel, dev_data):
     return res
 
 
-def output(file, dev_data):
+def output(file, dev_data,format):
     score_tie_counter = 0
     score_tie_query = set()
     output_file = open(file,'w')
@@ -202,7 +202,10 @@ def output(file, dev_data):
                 score_tie_query.add(qid)
             prev_score = t.score
             rank += 1
-            output_file.write(f"{qid}\t{t.pid}\t{rank}\n")
+            if (format == 'tsv'):
+                output_file.write(f"{qid}\t{t.pid}\t{rank}\n")
+            else:
+                output_file.write(f"{qid}\tq0\t{t.pid}\t{rank}\t{t.score}\tltr\n")
 
     score_tie = f'score_tie occurs {score_tie_counter} times in {len(score_tie_query)} queries'
     print(score_tie)
@@ -218,6 +221,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', required=True)
     parser.add_argument('--ibm-model',default='./collections/msmarco-ltr-passage/ibm_model/')
     parser.add_argument('--queries',default='./collections/msmarco-ltr-passage/')
+    parser.add_argument('--output-format',default='tsv')
 
     args = parser.parse_args()
     searcher = MsmarcoPassageLtrSearcher(args.model, args.ibm_model, args.index)
