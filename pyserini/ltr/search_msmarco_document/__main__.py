@@ -37,7 +37,7 @@ from pyserini.index import IndexReader
 """
 Running prediction on candidates
 """
-def dev_data_loader(file, format, top):
+def dev_data_loader(file, format, index, top):
     if format == 'tsv':
         dev = pd.read_csv(file, sep="\t",
                           names=['qid', 'pid', 'rank'],
@@ -53,7 +53,10 @@ def dev_data_loader(file, format, top):
     assert dev['pid'].dtype == np.object
     assert dev['rank'].dtype == np.int32
     dev = dev[dev['rank']<=top]
-    dev_qrel = pd.read_csv('tools/topics-and-qrels/qrels.msmarco-doc.dev.txt', sep=" ",
+    index_reader = IndexReader(index)
+    dev = dev.drop(i for i in dev.pid if index_reader.doc(i) == None)
+    print(dev.shape)
+    dev_qrel = pd.read_csv('tools/topics-and-qrels/qrels.msmarco-doc.dev.txt', sep="\t",
                            names=["qid", "q0", "pid", "rel"], usecols=['qid', 'pid', 'rel'],
                            dtype={'qid': 'S','pid': 'S', 'rel':'i'})
     assert dev['qid'].dtype == np.object
@@ -70,16 +73,6 @@ def dev_data_loader(file, format, top):
     print(dev.info())
 
     return dev, dev_qrel
-
-def filter_empty_doc(dev, index):
-    index_reader = IndexReader(index)
-    dev = dev.drop(i for i in dev.pid if index_reader.doc(i) == None)
-    print(dev.shape)
-    print(dev.index.get_level_values('qid').drop_duplicates().shape)
-    print(dev.groupby('qid').count().mean())
-    print(dev.head(10))
-    print(dev.info())
-    return dev
 
 def query_loader():
     queries = {}
@@ -211,9 +204,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     print("load dev")
-    dev, dev_qrel = dev_data_loader(args.input, args.input_format, args.reranking_top)
-    print("filter dev")
-    dev = filter_empty_doc(dev, args.index)
+    dev, dev_qrel = dev_data_loader(args.input, args.input_format, args.index, args.reranking_top)
     print("load queries")
     queries = query_loader()
     searcher = MsmarcoPassageLtrSearcher(args.model, args.ibm_model, args.index)
