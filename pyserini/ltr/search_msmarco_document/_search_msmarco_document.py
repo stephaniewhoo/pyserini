@@ -27,6 +27,7 @@ from tqdm import tqdm
 import pickle
 
 from pyserini.ltr._base import *
+from pyserini.index import IndexReader
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ class MsmarcoDocumentLtrSearcher:
          self.model = model
          self.ibm_model = ibm_model
          self.fe = FeatureExtractor(index, max(multiprocessing.cpu_count()//2, 1))
+         self.index_reader = IndexReader(index)
     
     def add_fe(self):
         for qfield, ifield in [('analyzed', 'contents'),
@@ -176,8 +178,9 @@ class MsmarcoDocumentLtrSearcher:
                 "query_dict": queries[qid]
             }
             for t in group.reset_index().itertuples():
-                task["docIds"].append(t.pid)
-                task_infos.append((qid, t.pid, t.rel))
+                if (self.index_reader.doc(t.pid) != None):
+                    task["docIds"].append(t.pid)
+                    task_infos.append((qid, t.pid, t.rel))
             tasks.append(task)
             group_lst.append((qid, len(task['docIds'])))
             if len(tasks) == 1000:
